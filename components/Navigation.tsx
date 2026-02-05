@@ -53,6 +53,31 @@ export default function Navigation() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Subscribe to profile changes to update coin balance in real-time
+  useEffect(() => {
+    if (!user?.id) return
+
+    const channel = supabase
+      .channel('profile-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${user.id}`
+        },
+        (payload) => {
+          setProfile(payload.new as Profile)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user?.id])
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/')
