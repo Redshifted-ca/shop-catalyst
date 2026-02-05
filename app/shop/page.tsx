@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { ShoppingCart, Coins, Package } from 'lucide-react'
+import { ShoppingCart, Coins, Package, Sparkles } from 'lucide-react'
 import Image from 'next/image'
-import { useBalance } from '@/contexts/BalanceContext'
 
 interface HardwareItem {
   id: string
@@ -24,7 +23,7 @@ interface CartItem {
 export default function ShopPage() {
   const [items, setItems] = useState<HardwareItem[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
-  const { balance, setBalance, refreshBalance } = useBalance()
+  const [balance, setBalance] = useState(0)
   const [loading, setLoading] = useState(true)
   const [purchasing, setPurchasing] = useState(false)
   const [error, setError] = useState('')
@@ -33,6 +32,7 @@ export default function ShopPage() {
 
   useEffect(() => {
     fetchItems()
+    fetchBalance()
   }, [])
 
   const fetchItems = async () => {
@@ -46,7 +46,18 @@ export default function ShopPage() {
     setLoading(false)
   }
 
-
+  const fetchBalance = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('virtual_currency')
+        .eq('id', user.id)
+        .single()
+      
+      if (data) setBalance(data.virtual_currency)
+    }
+  }
 
   const addToCart = (item: HardwareItem) => {
     setCart(prev => {
@@ -93,6 +104,12 @@ export default function ShopPage() {
   const handlePurchase = async () => {
     const total = getTotalCost()
     
+    if (total > balance) {
+      setError('Insufficient balance')
+      setTimeout(() => setError(''), 3000)
+      return
+    }
+
     if (cart.length === 0) {
       setError('Cart is empty')
       setTimeout(() => setError(''), 3000)
@@ -105,23 +122,6 @@ export default function ShopPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
-
-      // Refresh balance from server before purchase to prevent tampering
-      await refreshBalance()
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('virtual_currency')
-        .eq('id', user.id)
-        .single()
-      
-      const actualBalance = profileData?.virtual_currency || 0
-      
-      if (total > actualBalance) {
-        setError('Insufficient balance')
-        setTimeout(() => setError(''), 3000)
-        setPurchasing(false)
-        return
-      }
 
       const purchaseItems = cart.map(c => ({
         item_id: c.item.id,
@@ -137,8 +137,8 @@ export default function ShopPage() {
 
       setSuccess('Purchase successful! Check "My Orders" to view.')
       setCart([])
-      await refreshBalance() // Update shared balance after purchase
-      fetchItems() // Refresh stock
+      fetchBalance()
+      fetchItems()
       
       setTimeout(() => setSuccess(''), 5000)
     } catch (err: any) {
@@ -153,177 +153,237 @@ export default function ShopPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gradient-to-b from-black via-blue-950 to-cyan-950 flex items-center justify-center">
+        <div className="relative">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-cyan-500"></div>
+          <Sparkles className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-cyan-400 animate-pulse" />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Hardware Shop</h1>
-        <div className="flex items-center space-x-2 bg-green-100 px-4 py-2 rounded-lg">
-          <Coins className="w-5 h-5 text-green-600" />
-          <span className="font-semibold text-green-700">{balance} coins</span>
-        </div>
+    <div className="min-h-screen bg-gradient-to-b from-black via-blue-950 to-cyan-950 relative overflow-hidden">
+      {/* Animated background */}
+      <div className="absolute inset-0">
+        <div className="stars"></div>
+        <div className="stars2"></div>
+        <div className="stars3"></div>
       </div>
 
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          {error}
-        </div>
-      )}
+      {/* Nebula effects */}
+      <div className="absolute inset-0 opacity-20 pointer-events-none">
+        <div className="absolute top-20 right-1/4 w-96 h-96 bg-cyan-500 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-40 left-1/3 w-96 h-96 bg-blue-500 rounded-full blur-3xl"></div>
+      </div>
 
-      {success && (
-        <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">
-          {success}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Product Grid */}
-        <div className="lg:col-span-2">
-          {items.length === 0 ? (
-            <div className="text-center py-12">
-              <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">No items available</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {items.map(item => (
-                <div
-                  key={item.id}
-                  className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
-                >
-                  <div className="h-48 bg-gray-200 flex items-center justify-center">
-                    {item.image_url ? (
-                      <Image
-                        src={item.image_url}
-                        alt={item.name}
-                        width={200}
-                        height={200}
-                        className="object-cover w-full h-full"
-                      />
-                    ) : (
-                      <Package className="w-16 h-16 text-gray-400" />
-                    )}
-                  </div>
-                  
-                  <div className="p-4">
-                    <h3 className="font-semibold text-lg text-gray-900 mb-1">
-                      {item.name}
-                    </h3>
-                    {item.category && (
-                      <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded mb-2">
-                        {item.category}
-                      </span>
-                    )}
-                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-                      {item.description}
-                    </p>
-                    
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-2xl font-bold text-gray-900">
-                          {item.price}
-                        </span>
-                        <Coins className="inline w-5 h-5 ml-1 text-yellow-500" />
-                      </div>
-                      <span className="text-sm text-gray-500">
-                        Stock: {item.stock}
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={() => addToCart(item)}
-                      disabled={item.stock === 0}
-                      className="mt-4 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors"
-                    >
-                      {item.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-cyan-300 text-transparent bg-clip-text mb-2">
+              Hardware Shop
+            </h1>
+            <p className="text-gray-400">Equip your mission with the best gear</p>
+          </div>
+          <div className="flex items-center space-x-2 bg-gradient-to-r from-cyan-600/20 to-blue-600/20 backdrop-blur-sm border border-cyan-500/30 px-6 py-3 rounded-full">
+            <Coins className="w-6 h-6 text-yellow-400 animate-pulse" />
+            <span className="font-bold text-2xl bg-gradient-to-r from-yellow-400 to-yellow-200 text-transparent bg-clip-text">
+              {balance}
+            </span>
+          </div>
         </div>
 
-        {/* Cart Sidebar */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow-md p-6 sticky top-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-              <ShoppingCart className="w-5 h-5 mr-2" />
-              Shopping Cart
-            </h2>
+        {/* Alerts */}
+        {error && (
+          <div className="mb-6 bg-red-900/50 backdrop-blur-sm border border-red-500/50 text-red-200 px-6 py-4 rounded-lg animate-shake">
+            {error}
+          </div>
+        )}
 
-            {cart.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">Cart is empty</p>
+        {success && (
+          <div className="mb-6 bg-green-900/50 backdrop-blur-sm border border-green-500/50 text-green-200 px-6 py-4 rounded-lg flex items-center">
+            <Sparkles className="w-5 h-5 mr-2 animate-spin" />
+            {success}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Product Grid */}
+          <div className="lg:col-span-2">
+            {items.length === 0 ? (
+              <div className="text-center py-20 bg-gray-900/40 backdrop-blur-sm border border-cyan-500/20 rounded-2xl">
+                <Package className="w-20 h-20 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400">No items available in the shop</p>
+              </div>
             ) : (
-              <>
-                <div className="space-y-4 mb-4 max-h-96 overflow-y-auto">
-                  {cart.map(({ item, quantity }) => (
-                    <div key={item.id} className="border-b pb-3">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-medium text-sm">{item.name}</h4>
-                        <button
-                          onClick={() => removeFromCart(item.id)}
-                          className="text-red-500 hover:text-red-700 text-sm"
-                        >
-                          Remove
-                        </button>
-                      </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {items.map(item => (
+                  <div
+                    key={item.id}
+                    className="group bg-gray-900/60 backdrop-blur-sm border border-cyan-500/30 rounded-xl overflow-hidden hover:border-cyan-400/60 hover:shadow-xl hover:shadow-cyan-500/20 transition-all duration-300"
+                  >
+                    <div className="h-48 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center relative overflow-hidden">
+                      {item.image_url ? (
+                        <Image
+                          src={item.image_url}
+                          alt={item.name}
+                          width={200}
+                          height={200}
+                          className="object-cover w-full h-full group-hover:scale-110 transition-transform duration-300"
+                        />
+                      ) : (
+                        <Package className="w-20 h-20 text-gray-600 group-hover:text-cyan-500 transition-colors" />
+                      )}
+                      {item.category && (
+                        <div className="absolute top-3 right-3 bg-cyan-500/80 backdrop-blur-sm text-white text-xs px-3 py-1 rounded-full font-semibold">
+                          {item.category}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="p-5">
+                      <h3 className="font-bold text-lg text-cyan-300 mb-2 group-hover:text-cyan-200 transition-colors">
+                        {item.name}
+                      </h3>
+                      <p className="text-gray-400 text-sm mb-4 line-clamp-2">
+                        {item.description}
+                      </p>
                       
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center space-x-2">
+                          <span className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-yellow-200 text-transparent bg-clip-text">
+                            {item.price}
+                          </span>
+                          <Coins className="w-6 h-6 text-yellow-400" />
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-sm ${item.stock > 10 ? 'text-green-400' : item.stock > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
+                            {item.stock > 0 ? `${item.stock} in stock` : 'Out of stock'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => addToCart(item)}
+                        disabled={item.stock === 0}
+                        className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 
+                                 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed 
+                                 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200
+                                 shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50"
+                      >
+                        {item.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Cart Sidebar */}
+          <div className="lg:col-span-1">
+            <div className="bg-gray-900/60 backdrop-blur-sm border border-cyan-500/30 rounded-xl p-6 sticky top-4">
+              <h2 className="text-2xl font-bold text-cyan-300 mb-6 flex items-center">
+                <ShoppingCart className="w-6 h-6 mr-2" />
+                Shopping Cart
+              </h2>
+
+              {cart.length === 0 ? (
+                <div className="text-center py-12">
+                  <ShoppingCart className="w-16 h-16 text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-500">Your cart is empty</p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-4 mb-6 max-h-96 overflow-y-auto custom-scrollbar">
+                    {cart.map(({ item, quantity }) => (
+                      <div key={item.id} className="bg-gray-800/40 border border-cyan-500/20 rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <h4 className="font-semibold text-sm text-cyan-200">{item.name}</h4>
                           <button
-                            onClick={() => updateQuantity(item.id, quantity - 1)}
-                            className="w-7 h-7 rounded border border-gray-300 hover:bg-gray-100"
+                            onClick={() => removeFromCart(item.id)}
+                            className="text-red-400 hover:text-red-300 text-xs font-semibold"
                           >
-                            -
-                          </button>
-                          <span className="w-8 text-center">{quantity}</span>
-                          <button
-                            onClick={() => updateQuantity(item.id, quantity + 1)}
-                            className="w-7 h-7 rounded border border-gray-300 hover:bg-gray-100"
-                          >
-                            +
+                            Remove
                           </button>
                         </div>
-                        <span className="font-semibold">
-                          {item.price * quantity}
-                          <Coins className="inline w-4 h-4 ml-1 text-yellow-500" />
-                        </span>
+                        
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <button
+                              onClick={() => updateQuantity(item.id, quantity - 1)}
+                              className="w-8 h-8 rounded-lg border border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-300 font-bold transition-colors"
+                            >
+                              -
+                            </button>
+                            <span className="w-10 text-center font-bold text-white">{quantity}</span>
+                            <button
+                              onClick={() => updateQuantity(item.id, quantity + 1)}
+                              className="w-8 h-8 rounded-lg border border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-300 font-bold transition-colors"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <span className="font-bold text-lg text-yellow-400">
+                              {item.price * quantity}
+                            </span>
+                            <Coins className="w-4 h-4 text-yellow-400" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="border-t border-cyan-500/30 pt-6 mb-6">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-400">Subtotal:</span>
+                      <div className="flex items-center space-x-1">
+                        <span className="font-bold text-xl text-yellow-400">{cartTotal}</span>
+                        <Coins className="w-5 h-5 text-yellow-400" />
                       </div>
                     </div>
-                  ))}
-                </div>
-
-                <div className="border-t pt-4">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="font-semibold text-lg">Total:</span>
-                    <span className="font-bold text-2xl text-gray-900">
-                      {cartTotal}
-                      <Coins className="inline w-6 h-6 ml-1 text-yellow-500" />
-                    </span>
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-lg text-cyan-300">Total:</span>
+                      <div className="flex items-center space-x-1">
+                        <span className="font-bold text-3xl bg-gradient-to-r from-yellow-400 to-yellow-200 text-transparent bg-clip-text">
+                          {cartTotal}
+                        </span>
+                        <Coins className="w-7 h-7 text-yellow-400 animate-pulse" />
+                      </div>
+                    </div>
                   </div>
 
                   {cartTotal > balance && (
-                    <p className="text-red-600 text-sm mb-2">
-                      Insufficient balance (need {cartTotal - balance} more)
+                    <p className="text-red-400 text-sm mb-3 text-center bg-red-900/20 border border-red-500/30 rounded-lg py-2">
+                      Need {cartTotal - balance} more coins
                     </p>
                   )}
 
                   <button
                     onClick={handlePurchase}
                     disabled={purchasing || cartTotal > balance || cart.length === 0}
-                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-colors"
+                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 
+                             disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed
+                             text-white font-bold py-4 px-4 rounded-lg transition-all duration-200
+                             shadow-lg shadow-green-500/30 hover:shadow-green-500/50"
                   >
-                    {purchasing ? 'Processing...' : 'Complete Purchase'}
+                    {purchasing ? (
+                      <span className="flex items-center justify-center">
+                        <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Processing...
+                      </span>
+                    ) : (
+                      'Complete Purchase'
+                    )}
                   </button>
-                </div>
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

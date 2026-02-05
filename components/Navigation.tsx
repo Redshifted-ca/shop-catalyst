@@ -6,7 +6,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { User } from '@supabase/supabase-js'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
-import { ShoppingCart, Package, Upload, Settings, LogOut, Coins } from 'lucide-react'
+import { ShoppingCart, Package, Upload, Settings, LogOut, Coins, Sparkles } from 'lucide-react'
 import { useBalance } from '@/contexts/BalanceContext'
 
 interface Profile {
@@ -63,9 +63,10 @@ export default function Navigation() {
   if (!user) return null
 
   const navItems = [
-    { href: '/shop', label: 'Shop', icon: Package },
-    { href: '/cart', label: 'My Orders', icon: ShoppingCart },
-    { href: '/submit', label: 'Submit', icon: Upload },
+  { href: '/shop', label: 'Shop', icon: Package },
+  { href: '/cart', label: 'My Orders', icon: ShoppingCart },
+  { href: '/submit', label: 'Submit', icon: Upload },
+  { href: '/gallery', label: 'Gallery', icon: Sparkles }, // ADD THIS LINE
   ]
 
   if (profile?.role === 'admin') {

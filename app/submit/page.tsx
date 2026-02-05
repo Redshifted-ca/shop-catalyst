@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Github, Youtube, CheckCircle, Upload } from 'lucide-react'
+import { Github, Youtube, CheckCircle, Upload, Sparkles, Rocket } from 'lucide-react'
 
 interface Submission {
   id: string
@@ -89,22 +89,20 @@ export default function SubmitPage() {
       }
 
       if (submission) {
-        // Update existing submission
         const { error } = await supabase
           .from('submissions')
           .update(submissionData)
           .eq('id', submission.id)
 
         if (error) throw error
-        setSuccess('Submission updated successfully!')
+        setSuccess('Submission updated successfully! 🚀')
       } else {
-        // Create new submission
         const { error } = await supabase
           .from('submissions')
           .insert(submissionData)
 
         if (error) throw error
-        setSuccess('Submission created successfully!')
+        setSuccess('Submission created successfully! 🚀')
       }
 
       fetchSubmission()
@@ -117,125 +115,174 @@ export default function SubmitPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gradient-to-b from-black via-blue-950 to-cyan-950 flex items-center justify-center">
+        <div className="relative">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-cyan-500"></div>
+          <Sparkles className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-cyan-400 animate-pulse" />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="bg-white rounded-lg shadow-md p-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Submit Your Project</h1>
-        <p className="text-gray-600 mb-8">
-          Share your hackathon project with us! You can update your submission at any time.
-        </p>
+    <div className="min-h-screen bg-gradient-to-b from-black via-blue-950 to-cyan-950 relative overflow-hidden">
+      {/* Animated background */}
+      <div className="absolute inset-0">
+        <div className="stars"></div>
+        <div className="stars2"></div>
+        <div className="stars3"></div>
+      </div>
 
-        {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-            {error}
-          </div>
-        )}
+      {/* Nebula effects */}
+      <div className="absolute inset-0 opacity-20 pointer-events-none">
+        <div className="absolute top-20 right-1/4 w-96 h-96 bg-cyan-500 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-40 left-1/3 w-96 h-96 bg-purple-500 rounded-full blur-3xl"></div>
+      </div>
 
-        {success && (
-          <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center">
-            <CheckCircle className="w-5 h-5 mr-2" />
-            {success}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Project Name (Optional)
-            </label>
-            <input
-              type="text"
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              placeholder="My Awesome Project"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Github className="inline w-4 h-4 mr-1" />
-              GitHub Repository URL *
-            </label>
-            <input
-              type="url"
-              value={githubUrl}
-              onChange={(e) => setGithubUrl(e.target.value)}
-              placeholder="https://github.com/username/repo"
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              Must be a valid GitHub repository URL
+      <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="bg-gray-900/60 backdrop-blur-sm border border-cyan-500/30 rounded-2xl p-8">
+          <div className="text-center mb-8">
+            <div className="inline-block mb-4">
+              <Rocket className="w-16 h-16 text-cyan-400 animate-bounce" />
+            </div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 text-transparent bg-clip-text mb-2">
+              Submit Your Project
+            </h1>
+            <p className="text-gray-400">
+              Share your creation with the universe! You can update anytime.
             </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              <Youtube className="inline w-4 h-4 mr-1" />
-              YouTube Video URL *
-            </label>
-            <input
-              type="url"
-              value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl(e.target.value)}
-              placeholder="https://youtube.com/watch?v=..."
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              Demo video or project presentation
-            </p>
-          </div>
+          {error && (
+            <div className="mb-6 bg-red-900/50 backdrop-blur-sm border border-red-500/50 text-red-200 px-6 py-4 rounded-lg">
+              {error}
+            </div>
+          )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Project Description (Optional)
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Tell us about your project..."
-              rows={4}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+          {success && (
+            <div className="mb-6 bg-green-900/50 backdrop-blur-sm border border-green-500/50 text-green-200 px-6 py-4 rounded-lg flex items-center">
+              <CheckCircle className="w-5 h-5 mr-2" />
+              {success}
+            </div>
+          )}
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
-          >
-            {submitting ? (
-              'Submitting...'
-            ) : (
-              <>
-                <Upload className="w-5 h-5 mr-2" />
-                {submission ? 'Update Submission' : 'Submit Project'}
-              </>
-            )}
-          </button>
-        </form>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-cyan-300 text-sm font-semibold mb-2">
+                Project Name (Optional)
+              </label>
+              <input
+                type="text"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                placeholder="My Awesome Galactic Project"
+                className="w-full px-4 py-3 bg-gray-800/50 border border-cyan-500/30 rounded-lg 
+                         focus:ring-2 focus:ring-cyan-500 focus:border-transparent
+                         text-white placeholder-gray-500 transition-all"
+              />
+            </div>
 
-        {submission && (
-          <div className="mt-8 pt-8 border-t border-gray-200">
-            <h3 className="font-semibold text-gray-900 mb-2">Submission History</h3>
-            <p className="text-sm text-gray-600">
-              Originally submitted: {new Date(submission.submitted_at).toLocaleString()}
-            </p>
-            {submission.updated_at !== submission.submitted_at && (
-              <p className="text-sm text-gray-600">
-                Last updated: {new Date(submission.updated_at).toLocaleString()}
+            <div>
+              <label className="block text-cyan-300 text-sm font-semibold mb-2 flex items-center">
+                <Github className="w-4 h-4 mr-2" />
+                GitHub Repository URL *
+              </label>
+              <input
+                type="url"
+                value={githubUrl}
+                onChange={(e) => setGithubUrl(e.target.value)}
+                placeholder="https://github.com/username/repo"
+                required
+                className="w-full px-4 py-3 bg-gray-800/50 border border-cyan-500/30 rounded-lg 
+                         focus:ring-2 focus:ring-cyan-500 focus:border-transparent
+                         text-white placeholder-gray-500 transition-all"
+              />
+              <p className="mt-2 text-sm text-gray-500">
+                Your code repository on GitHub
               </p>
-            )}
-          </div>
-        )}
+            </div>
+
+            <div>
+              <label className="block text-cyan-300 text-sm font-semibold mb-2 flex items-center">
+                <Youtube className="w-4 h-4 mr-2" />
+                YouTube Video URL *
+              </label>
+              <input
+                type="url"
+                value={youtubeUrl}
+                onChange={(e) => setYoutubeUrl(e.target.value)}
+                placeholder="https://youtube.com/watch?v=..."
+                required
+                className="w-full px-4 py-3 bg-gray-800/50 border border-cyan-500/30 rounded-lg 
+                         focus:ring-2 focus:ring-cyan-500 focus:border-transparent
+                         text-white placeholder-gray-500 transition-all"
+              />
+              <p className="mt-2 text-sm text-gray-500">
+                Demo video or project presentation
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-cyan-300 text-sm font-semibold mb-2">
+                Project Description (Optional)
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Tell us about your incredible creation..."
+                rows={5}
+                className="w-full px-4 py-3 bg-gray-800/50 border border-cyan-500/30 rounded-lg 
+                         focus:ring-2 focus:ring-cyan-500 focus:border-transparent
+                         text-white placeholder-gray-500 transition-all resize-none"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 
+                       disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed 
+                       text-white font-bold py-4 px-4 rounded-lg transition-all duration-200
+                       shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50 flex items-center justify-center"
+            >
+              {submitting ? (
+                <>
+                  <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Submitting to the cosmos...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-5 h-5 mr-2" />
+                  {submission ? 'Update Submission' : 'Launch Submission'}
+                </>
+              )}
+            </button>
+          </form>
+
+          {submission && (
+            <div className="mt-8 pt-8 border-t border-cyan-500/30">
+              <h3 className="font-semibold text-cyan-300 mb-3 flex items-center">
+                <Sparkles className="w-4 h-4 mr-2" />
+                Submission History
+              </h3>
+              <div className="bg-gray-800/30 rounded-lg p-4 space-y-2">
+                <p className="text-sm text-gray-400">
+                  <span className="text-cyan-400 font-semibold">Originally submitted:</span>{' '}
+                  {new Date(submission.submitted_at).toLocaleString()}
+                </p>
+                {submission.updated_at !== submission.submitted_at && (
+                  <p className="text-sm text-gray-400">
+                    <span className="text-cyan-400 font-semibold">Last updated:</span>{' '}
+                    {new Date(submission.updated_at).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
