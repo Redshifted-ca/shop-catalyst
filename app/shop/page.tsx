@@ -291,7 +291,7 @@ export default function ShopPage() {
                           </button>
                         </div>
                         <span className="font-semibold">
-                          {quantity}
+                          {item.price * quantity}
                           <Coins className="inline w-4 h-4 ml-1 text-yellow-500" />
                         </span>
                       </div>
