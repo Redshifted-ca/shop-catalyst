@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import Navigation from '@/components/Navigation'
 import { Analytics } from '@vercel/analytics/next'
+import { BalanceProvider } from '@/contexts/BalanceContext'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -24,6 +25,12 @@ export default function RootLayout({
           {children}
         </main>
         <Analytics />
+        <BalanceProvider>
+          <Navigation />
+          <main className="min-h-screen bg-gray-50">
+            {children}
+          </main>
+        </BalanceProvider>
       </body>
     </html>
   )
