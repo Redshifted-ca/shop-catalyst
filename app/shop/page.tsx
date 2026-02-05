@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ShoppingCart, Coins, Package } from 'lucide-react'
 import Image from 'next/image'
+import { useBalance } from '@/contexts/BalanceContext'
 
 interface HardwareItem {
   id: string
@@ -23,7 +24,7 @@ interface CartItem {
 export default function ShopPage() {
   const [items, setItems] = useState<HardwareItem[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
-  const [balance, setBalance] = useState(0)
+  const { balance, setBalance, refreshBalance } = useBalance()
   const [loading, setLoading] = useState(true)
   const [purchasing, setPurchasing] = useState(false)
   const [error, setError] = useState('')
@@ -32,7 +33,6 @@ export default function ShopPage() {
 
   useEffect(() => {
     fetchItems()
-    fetchBalance()
   }, [])
 
   const fetchItems = async () => {
@@ -46,18 +46,7 @@ export default function ShopPage() {
     setLoading(false)
   }
 
-  const fetchBalance = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('virtual_currency')
-        .eq('id', user.id)
-        .single()
-      
-      if (data) setBalance(data.virtual_currency)
-    }
-  }
+
 
   const addToCart = (item: HardwareItem) => {
     setCart(prev => {
@@ -104,12 +93,6 @@ export default function ShopPage() {
   const handlePurchase = async () => {
     const total = getTotalCost()
     
-    if (total > balance) {
-      setError('Insufficient balance')
-      setTimeout(() => setError(''), 3000)
-      return
-    }
-
     if (cart.length === 0) {
       setError('Cart is empty')
       setTimeout(() => setError(''), 3000)
@@ -122,6 +105,23 @@ export default function ShopPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
+
+      // Refresh balance from server before purchase to prevent tampering
+      await refreshBalance()
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('virtual_currency')
+        .eq('id', user.id)
+        .single()
+      
+      const actualBalance = profileData?.virtual_currency || 0
+      
+      if (total > actualBalance) {
+        setError('Insufficient balance')
+        setTimeout(() => setError(''), 3000)
+        setPurchasing(false)
+        return
+      }
 
       const purchaseItems = cart.map(c => ({
         item_id: c.item.id,
@@ -137,7 +137,7 @@ export default function ShopPage() {
 
       setSuccess('Purchase successful! Check "My Orders" to view.')
       setCart([])
-      fetchBalance()
+      await refreshBalance() // Update shared balance after purchase
       fetchItems() // Refresh stock
       
       setTimeout(() => setSuccess(''), 5000)

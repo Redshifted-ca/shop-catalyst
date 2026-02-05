@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { User } from '@supabase/supabase-js'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { ShoppingCart, Package, Upload, Settings, LogOut, Coins } from 'lucide-react'
+import { useBalance } from '@/contexts/BalanceContext'
 
 interface Profile {
   id: string
@@ -26,6 +27,7 @@ export default function Navigation() {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
+  const { balance } = useBalance()
 
   useEffect(() => {
     const getUser = async () => {
@@ -52,31 +54,6 @@ export default function Navigation() {
 
     return () => subscription.unsubscribe()
   }, [])
-
-  // Subscribe to profile changes to update coin balance in real-time
-  useEffect(() => {
-    if (!user?.id) return
-
-    const channel = supabase
-      .channel('profile-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'profiles',
-          filter: `id=eq.${user.id}`
-        },
-        (payload) => {
-          setProfile(payload.new as Profile)
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [user?.id])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -128,7 +105,7 @@ export default function Navigation() {
             <div className="flex items-center bg-green-50 px-3 py-1 rounded-full">
               <Coins className="w-4 h-4 text-green-600 mr-1" />
               <span className="text-sm font-medium text-green-700">
-                {profile?.virtual_currency || 0} coins
+                {balance} coins
               </span>
             </div>
             <button
