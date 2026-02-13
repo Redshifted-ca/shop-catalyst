@@ -8,8 +8,8 @@ import { Analytics } from '@vercel/analytics/next'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Hackathon Hardware Shop',
-  description: 'Get the parts you need for your project',
+  title: 'Catalyst Portal',
+  description: 'Get the parts, submit something coo, and win prizes!',
 }
 
 export default function RootLayout({
