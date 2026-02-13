@@ -21,6 +21,7 @@ interface HardwareItem {
   stock: number
   category: string | null
   is_active: boolean
+  purchase_limit: number
 }
 
 type Tab = 'users' | 'hardware' | 'submissions'
@@ -283,11 +284,12 @@ function HardwareTab({ hardware, onUpdate }: { hardware: HardwareItem[]; onUpdat
     price: 0,
     stock: 0,
     category: '',
+    purchase_limit: 5, // Default purchase limit
   })
   const supabase = createClient()
 
   const resetForm = () => {
-    setFormData({ name: '', description: '', price: 0, stock: 0, category: '' })
+    setFormData({ name: '', description: '', price: 0, stock: 0, category: '', purchase_limit: 5 })
     setEditingItem(null)
     setIsCreating(false)
   }
@@ -341,6 +343,7 @@ function HardwareTab({ hardware, onUpdate }: { hardware: HardwareItem[]; onUpdat
       price: item.price,
       stock: item.stock,
       category: item.category || '',
+      purchase_limit: 5, // Default value, you can adjust as needed
     })
   }
 
@@ -364,6 +367,7 @@ function HardwareTab({ hardware, onUpdate }: { hardware: HardwareItem[]; onUpdat
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purchase Limit</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
@@ -378,6 +382,7 @@ function HardwareTab({ hardware, onUpdate }: { hardware: HardwareItem[]; onUpdat
                 <td className="px-6 py-4 text-sm">{item.category || 'N/A'}</td>
                 <td className="px-6 py-4 font-semibold">{item.price}</td>
                 <td className="px-6 py-4">{item.stock}</td>
+                <td className="px-6 py-4 font-semibold">{item.purchase_limit}</td>
                 <td className="px-6 py-4">
                   <span className={`px-2 py-1 rounded text-xs ${item.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                     {item.is_active ? 'Active' : 'Inactive'}
@@ -439,6 +444,13 @@ function HardwareTab({ hardware, onUpdate }: { hardware: HardwareItem[]; onUpdat
                 placeholder="Stock"
                 value={formData.stock}
                 onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) || 0 })}
+                className="w-full px-3 py-2 border rounded"
+              />
+              <input
+                type="number"
+                placeholder="Purchase limit per person"
+                value={formData.purchase_limit}
+                onChange={(e) => setFormData({ ...formData, purchase_limit: parseInt(e.target.value) || 1 })}
                 className="w-full px-3 py-2 border rounded"
               />
             </div>

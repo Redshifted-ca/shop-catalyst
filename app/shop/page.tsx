@@ -13,6 +13,7 @@ interface HardwareItem {
   stock: number
   image_url: string | null
   category: string | null
+  purchase_limit: number
 }
 
 interface CartItem {
@@ -29,6 +30,8 @@ export default function ShopPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const supabase = createClient()
+  const [purchaseHistory, setPurchaseHistory] = useState<Record<string, number>>({})
+
 
   useEffect(() => {
     fetchItems()
@@ -45,6 +48,38 @@ export default function ShopPage() {
     if (data) setItems(data)
     setLoading(false)
   }
+
+  // Add this function
+  const fetchPurchaseHistory = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from('order_items')
+      .select(`
+        hardware_item_id,
+        quantity,
+        orders!inner(user_id, status)
+      `)
+      .eq('orders.user_id', user.id)
+      .neq('orders.status', 'cancelled')
+
+    if (data) {
+      const history: Record<string, number> = {}
+      data.forEach((item: any) => {
+        const itemId = item.hardware_item_id
+        history[itemId] = (history[itemId] || 0) + item.quantity
+      })
+      setPurchaseHistory(history)
+    }
+  }
+
+  // Call it in useEffect
+  useEffect(() => {
+    fetchItems()
+    fetchBalance()
+    fetchPurchaseHistory() // Add this
+  }, [])
 
   const fetchBalance = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -102,52 +137,67 @@ export default function ShopPage() {
   }
 
   const handlePurchase = async () => {
-    const total = getTotalCost()
-    
-    if (total > balance) {
-      setError('Insufficient balance')
-      setTimeout(() => setError(''), 3000)
-      return
-    }
-
-    if (cart.length === 0) {
-      setError('Cart is empty')
-      setTimeout(() => setError(''), 3000)
-      return
-    }
-
-    setPurchasing(true)
-    setError('')
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not authenticated')
-
-      const purchaseItems = cart.map(c => ({
-        item_id: c.item.id,
-        quantity: c.quantity
-      }))
-
-      const { data, error } = await supabase.rpc('process_purchase', {
-        p_user_id: user.id,
-        p_items: purchaseItems
-      })
-
-      if (error) throw error
-
-      setSuccess('Purchase successful! Check "My Orders" to view.')
-      setCart([])
-      fetchBalance()
-      fetchItems()
-      
-      setTimeout(() => setSuccess(''), 5000)
-    } catch (err: any) {
-      setError(err.message || 'Purchase failed')
-      setTimeout(() => setError(''), 5000)
-    } finally {
-      setPurchasing(false)
-    }
+  const total = getTotalCost()
+  
+  if (total > balance) {
+    setError('Insufficient balance')
+    setTimeout(() => setError(''), 3000)
+    return
   }
+
+  if (cart.length === 0) {
+    setError('Cart is empty')
+    setTimeout(() => setError(''), 3000)
+    return
+  }
+
+  setPurchasing(true)
+  setError('')
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Not authenticated')
+
+    const purchaseItems = cart.map(c => ({
+      item_id: c.item.id,
+      quantity: c.quantity
+    }))
+
+    const { data, error } = await supabase.rpc('process_purchase_with_item_limits', {
+      p_user_id: user.id,
+      p_items: purchaseItems
+    })
+
+    if (error) {
+      // Parse error messages for better UX
+      let errorMsg = error.message
+      
+      if (errorMsg.includes('Insufficient stock')) {
+        // Extract item name and quantities if possible
+        errorMsg = errorMsg.replace(/Insufficient stock for (.+): Only (\d+) remaining, you requested (\d+)/, 
+          'Only $2 remaining for $1 (you wanted $3)')
+      } else if (errorMsg.includes('Purchase limit exceeded')) {
+        errorMsg = errorMsg.replace(/Purchase limit exceeded for (.+): You have already purchased (\d+) and are trying to purchase (\d+) more \(limit: (\d+) per person\)/,
+          'You\'ve hit the purchase limit for $1 ($2 + $3 = more than $4 allowed)')
+      }
+      
+      throw new Error(errorMsg)
+    }
+
+    setSuccess('Purchase successful! Check "My Orders" to view.')
+    setCart([])
+    fetchBalance()
+    fetchItems()
+    fetchPurchaseHistory() // Refresh purchase counts
+    
+    setTimeout(() => setSuccess(''), 5000)
+  } catch (err: any) {
+    setError(err.message || 'Purchase failed')
+    setTimeout(() => setError(''), 5000)
+  } finally {
+    setPurchasing(false)
+  }
+}
 
   const cartTotal = getTotalCost()
 
@@ -249,6 +299,7 @@ export default function ShopPage() {
                       <p className="text-gray-400 text-sm mb-4 line-clamp-2">
                         {item.description}
                       </p>
+                      <p className="text-xs text-gray-500 mb-4">Purchase Limit: {item.purchase_limit}</p>
                       
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center space-x-2">
@@ -261,18 +312,33 @@ export default function ShopPage() {
                           <span className={`text-sm ${item.stock > 10 ? 'text-green-400' : item.stock > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
                             {item.stock > 0 ? `${item.stock} in stock` : 'Out of stock'}
                           </span>
+                          {/* ADD THIS SECTION */}
+                          {purchaseHistory[item.id] && (
+                            <div className="text-xs text-cyan-400 mt-1">
+                              You've purchased: {purchaseHistory[item.id]}/{item.purchase_limit}
+                            </div>
+                          )}
                         </div>
                       </div>
 
+                      {/* Update button disabled logic */}
                       <button
                         onClick={() => addToCart(item)}
-                        disabled={item.stock === 0}
+                        disabled={
+                          item.stock === 0 || 
+                          (purchaseHistory[item.id] || 0) >= item.purchase_limit
+                        }
                         className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 
-                                 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed 
-                                 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200
-                                 shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50"
+                                disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed 
+                                text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200
+                                shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50"
                       >
-                        {item.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
+                        {item.stock === 0 
+                          ? 'Out of Stock' 
+                          : (purchaseHistory[item.id] || 0) >= item.purchase_limit
+                          ? 'Purchase Limit Reached'
+                          : 'Add to Cart'
+                        }
                       </button>
                     </div>
                   </div>

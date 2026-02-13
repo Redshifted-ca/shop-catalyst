@@ -78,7 +78,7 @@ export default function Navigation() {
   }
 
   return (
-    <nav className="bg-white border-b border-gray-200">
+    <nav className="bg-black border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex space-x-8">
@@ -91,8 +91,8 @@ export default function Navigation() {
                   href={item.href}
                   className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                     isActive
-                      ? 'border-blue-500 text-gray-900'
-                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                      ? 'border-blue-500 text-gray-100'
+                      : 'border-transparent text-gray-100 hover:border-gray-300 hover:text-gray-400'
                   }`}
                 >
                   <Icon className="w-4 h-4 mr-2" />
@@ -103,7 +103,7 @@ export default function Navigation() {
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="flex items-center bg-green-50 px-3 py-1 rounded-full">
+            <div className="flex items-center bg-gray-800 px-3 py-1 rounded-full">
               <Coins className="w-4 h-4 text-green-600 mr-1" />
               <span className="text-sm font-medium text-green-700">
                 {balance} coins
