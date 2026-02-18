@@ -111,8 +111,9 @@ export default function CashierPage() {
         buffer += value
 
         // Process complete lines
+        // In readSerialData function
         const lines = buffer.split('\n')
-        buffer = lines.pop() || '' // Keep incomplete line in buffer
+        buffer = lines.pop() || ''
 
         for (const line of lines) {
           const trimmed = line.trim()
@@ -121,6 +122,11 @@ export default function CashierPage() {
           if (trimmed.startsWith('NFC_SCAN:')) {
             const nfcId = trimmed.replace('NFC_SCAN:', '')
             handleNFCScan(nfcId)
+          } else if (trimmed.startsWith('NFC_DATA:')) {
+            // NEW: Handle data read from tag
+            const data = trimmed.replace('NFC_DATA:', '')
+            console.log('Tag contains:', data)
+            // Could use this instead of/in addition to UID lookup
           } else if (trimmed === 'NFC_READY') {
             setSerialStatus('Ready - Waiting for NFC scan...')
           } else if (trimmed.startsWith('NFC_ERROR:')) {

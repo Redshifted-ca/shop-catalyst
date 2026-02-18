@@ -7,7 +7,6 @@ import { createClient } from '@/lib/supabase/client'
 import { User } from '@supabase/supabase-js'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { ShoppingCart, Package, Upload, Settings, LogOut, Coins, Sparkles } from 'lucide-react'
-import { useBalance } from '@/contexts/BalanceContext'
 
 interface Profile {
   id: string
@@ -27,10 +26,10 @@ export default function Navigation() {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
-  const { balance } = useBalance()
 
   useEffect(() => {
-    const getUser = async () => {
+    // FIXED: Use getUser() on mount
+    const getInitialUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
 
@@ -44,11 +43,28 @@ export default function Navigation() {
       }
     }
 
-    getUser()
+    getInitialUser()
 
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event: AuthChangeEvent, session: Session | null) => {
-        setUser(session?.user ?? null)
+      async (_event: AuthChangeEvent, session: Session | null) => {
+        if (session?.user) {
+          // FIXED: Verify user authenticity after state change
+          const { data: { user } } = await supabase.auth.getUser()
+          setUser(user)
+          
+          if (user) {
+            const { data } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', user.id)
+              .single()
+            setProfile(data)
+          }
+        } else {
+          setUser(null)
+          setProfile(null)
+        }
       }
     )
 
@@ -63,10 +79,10 @@ export default function Navigation() {
   if (!user) return null
 
   const navItems = [
-  { href: '/shop', label: 'Shop', icon: Package },
-  { href: '/cart', label: 'My Orders', icon: ShoppingCart },
-  { href: '/submit', label: 'Submit', icon: Upload },
-  { href: '/gallery', label: 'Gallery', icon: Sparkles }, // ADD THIS LINE
+    { href: '/shop', label: 'Shop', icon: Package },
+    { href: '/cart', label: 'My Orders', icon: ShoppingCart },
+    { href: '/submit', label: 'Submit', icon: Upload },
+    { href: '/gallery', label: 'Gallery', icon: Sparkles },
   ]
 
   if (profile?.role === 'admin') {
@@ -78,7 +94,7 @@ export default function Navigation() {
   }
 
   return (
-    <nav className="bg-black border-b border-gray-200">
+    <nav className="bg-white border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex space-x-8">
@@ -91,8 +107,8 @@ export default function Navigation() {
                   href={item.href}
                   className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                     isActive
-                      ? 'border-blue-500 text-gray-100'
-                      : 'border-transparent text-gray-100 hover:border-gray-300 hover:text-gray-400'
+                      ? 'border-blue-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
                   }`}
                 >
                   <Icon className="w-4 h-4 mr-2" />
@@ -103,10 +119,10 @@ export default function Navigation() {
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="flex items-center bg-gray-800 px-3 py-1 rounded-full">
+            <div className="flex items-center bg-green-50 px-3 py-1 rounded-full">
               <Coins className="w-4 h-4 text-green-600 mr-1" />
               <span className="text-sm font-medium text-green-700">
-                {balance} coins
+                {profile?.virtual_currency || 0} coins
               </span>
             </div>
             <button
