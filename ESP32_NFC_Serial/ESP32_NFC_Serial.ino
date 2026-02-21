@@ -1,113 +1,128 @@
 #include <Wire.h>
 #include <Adafruit_PN532.h>
+#include <esp_task_wdt.h>
 
 // Custom I2C pins
-#define SDA_PIN 4   // D4 on your ESP32
-#define SCL_PIN 22  // D22 (standard SCL)
+#define SDA_PIN 2   // D4
+#define SCL_PIN 4  // D22
 
-#define PN532_IRQ   (2)
-#define PN532_RESET (3) 
+// Watchdog timeout
+#define WDT_TIMEOUT 10
 
-// Create PN532 instance
-Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
+Adafruit_PN532 nfc(SDA_PIN, SCL_PIN);
 
 // Scan tracking
 String lastNfcId = "";
 unsigned long lastScanTime = 0;
-const unsigned long SCAN_COOLDOWN = 2000; // 2 seconds between scans
+const unsigned long SCAN_COOLDOWN = 2000;
 
 // Statistics
 int totalScans = 0;
 int successfulReads = 0;
 int successfulWrites = 0;
+int loopCount = 0;
+
+// Command mode
+String pendingWriteData = "";
+bool writeMode = false;
+bool readMode = false;
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
+  
+  // Enable watchdog
+  esp_task_wdt_init(WDT_TIMEOUT, true);
+  esp_task_wdt_add(NULL);
+  
   delay(1000);
   
   Serial.println("\n\n╔════════════════════════════════════════╗");
-  Serial.println("║   NFC CASHIER SYSTEM - FULL VERSION   ║");
-  Serial.println("║   Read & Write Capabilities            ║");
+  Serial.println("║   NFC CASHIER - READ/WRITE SYSTEM      ║");
   Serial.println("╚════════════════════════════════════════╝\n");
   
-  // Initialize I2C with custom pins
+  // Initialize I2C
   Wire.begin(SDA_PIN, SCL_PIN);
-  Serial.print("✓ I2C initialized on SDA=D4 (GPIO");
-  Serial.print(SDA_PIN);
-  Serial.print("), SCL=D22 (GPIO");
-  Serial.print(SCL_PIN);
-  Serial.println(")");
+  Wire.setClock(100000);
   
-  // Initialize NFC reader
-  nfc.begin();
+  Serial.print("✓ I2C initialized on SDA=D4, SCL=D22\n");
   
-  uint32_t versiondata = nfc.getFirmwareVersion();
-  if (!versiondata) {
-    Serial.println("\n╔═══════════════════════════════════╗");
-    Serial.println("║  ❌ ERROR: PN532 NOT FOUND!      ║");
-    Serial.println("╚═══════════════════════════════════╝");
-    Serial.println("\nCheck wiring:");
-    Serial.println("  VCC → 3.3V (NOT 5V!)");
-    Serial.println("  GND → GND");
-    Serial.println("  SDA → D4 (GPIO 4)");
-    Serial.println("  SCL → D22 (GPIO 22)");
-    Serial.println("\nCheck PN532 mode switches:");
-    Serial.println("  SEL0 = OFF");
-    Serial.println("  SEL1 = ON (I2C mode)");
-    Serial.println("\n⚠️  System halted. Fix wiring and reset ESP32.");
+  // Initialize NFC with retries
+  int retries = 0;
+  bool nfcInitialized = false;
+  
+  while (!nfcInitialized && retries < 5) {
+    nfc.begin();
+    uint32_t versiondata = nfc.getFirmwareVersion();
     
-    while (1) {
+    if (versiondata) {
+      Serial.print("✓ Found PN5");
+      Serial.print((versiondata >> 24) & 0xFF, HEX);
+      Serial.print(" firmware v");
+      Serial.print((versiondata >> 16) & 0xFF, DEC);
+      Serial.print(".");
+      Serial.println((versiondata >> 8) & 0xFF, DEC);
+      nfcInitialized = true;
+    } else {
+      retries++;
+      Serial.print("⚠️  Retry ");
+      Serial.print(retries);
+      Serial.println("/5");
       delay(1000);
     }
   }
   
-  // Print version info
-  Serial.print("\n✓ Found PN5");
-  Serial.print((versiondata >> 24) & 0xFF, HEX);
-  Serial.print(" firmware v");
-  Serial.print((versiondata >> 16) & 0xFF, DEC);
-  Serial.print(".");
-  Serial.println((versiondata >> 8) & 0xFF, DEC);
+  if (!nfcInitialized) {
+    Serial.println("❌ PN532 NOT FOUND!");
+    while (1) {
+      esp_task_wdt_reset();
+      delay(1000);
+    }
+  }
   
-  // Configure PN532 to read RFID tags
   nfc.SAMConfig();
   
   Serial.println("\n╔════════════════════════════════════════╗");
   Serial.println("║          SYSTEM READY! ✓               ║");
   Serial.println("╚════════════════════════════════════════╝");
   Serial.println("NFC_READY");
-  Serial.println("\n📡 Waiting for NFC tag...\n");
-  
-  printCommands();
+  Serial.println();
 }
 
 void loop() {
+  esp_task_wdt_reset();
+  
   static unsigned long lastHeartbeat = 0;
+  loopCount++;
   
   // Heartbeat every 5 seconds
   if (millis() - lastHeartbeat > 5000) {
     Serial.print("⏱️  Uptime: ");
     Serial.print(millis() / 1000);
-    Serial.print("s | Scans: ");
+    Serial.print("s | Loops: ");
+    Serial.print(loopCount);
+    Serial.print(" | Scans: ");
     Serial.print(totalScans);
     Serial.print(" | Reads: ");
     Serial.print(successfulReads);
     Serial.print(" | Writes: ");
     Serial.println(successfulWrites);
+    
     lastHeartbeat = millis();
+    loopCount = 0;
   }
   
-  // Check for serial commands
+  // Check for serial commands from browser
   if (Serial.available() > 0) {
-    handleSerialCommand();
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+    handleCommand(command);
   }
   
   // Check for NFC tag
-  uint8_t success;
-  uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };
+  uint8_t uid[7];
   uint8_t uidLength;
   
-  success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100);
+  uint8_t success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 50);
   
   if (success) {
     totalScans++;
@@ -123,253 +138,166 @@ void loop() {
     // Prevent duplicate scans
     unsigned long currentTime = millis();
     if (nfcId == lastNfcId && (currentTime - lastScanTime) < SCAN_COOLDOWN) {
+      delay(50);
       return;
     }
     
     lastNfcId = nfcId;
     lastScanTime = currentTime;
     
-    // Display scan info
-    printScanHeader();
-    printTagInfo(uid, uidLength, nfcId);
+    // Handle based on mode
+    if (writeMode) {
+      handleWrite(uid, uidLength, nfcId);
+    } else if (readMode) {
+      handleRead(uid, uidLength, nfcId);
+    } else {
+      // Normal scan mode - just send to browser
+      handleNormalScan(uid, uidLength, nfcId);
+    }
     
-    // Try to read data from tag
-    readTagData(uid, uidLength);
-    
-    // Send to browser
-    Serial.print("NFC_SCAN:");
-    Serial.println(nfcId);
-    
-    printScanFooter();
-    
-    successfulReads++;
-    
-    delay(500);
+    delay(300);
   }
   
   delay(50);
 }
 
-void handleSerialCommand() {
-  String command = Serial.readStringUntil('\n');
-  command.trim();
+void handleCommand(String command) {
   command.toUpperCase();
   
-  if (command == "HELP" || command == "?") {
-    printCommands();
-  } else if (command == "STATS") {
+  Serial.print("CMD_RECEIVED:");
+  Serial.println(command);
+  
+  if (command.startsWith("WRITE:")) {
+    // Format: WRITE:data to write
+    pendingWriteData = command.substring(6);
+    writeMode = true;
+    readMode = false;
+    Serial.println("WRITE_MODE_ACTIVE");
+    Serial.print("WRITE_DATA_SET:");
+    Serial.println(pendingWriteData);
+  } 
+  else if (command == "READ") {
+    readMode = true;
+    writeMode = false;
+    Serial.println("READ_MODE_ACTIVE");
+  }
+  else if (command == "NORMAL") {
+    writeMode = false;
+    readMode = false;
+    Serial.println("NORMAL_MODE_ACTIVE");
+  }
+  else if (command == "STATS") {
     printStats();
-  } else if (command.startsWith("WRITE:")) {
-    // Format: WRITE:Hello World
-    String data = command.substring(6);
-    Serial.println("\n🔵 Write mode activated. Tap NFC tag to write data...");
-    writeToNextTag(data);
-  } else if (command == "SCAN") {
-    Serial.println("\n🔵 Manual scan requested...");
-  } else if (command == "RESET") {
-    totalScans = 0;
-    successfulReads = 0;
-    successfulWrites = 0;
-    Serial.println("\n✓ Statistics reset");
-  } else {
-    Serial.println("❓ Unknown command. Type HELP for commands.");
+  }
+  else {
+    Serial.print("UNKNOWN_CMD:");
+    Serial.println(command);
   }
 }
 
-void writeToNextTag(String data) {
-  Serial.println("⏳ Waiting for tag...");
-  
-  // Wait for tag (blocking)
-  uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };
-  uint8_t uidLength;
-  
-  unsigned long startWait = millis();
-  while (millis() - startWait < 30000) { // 30 second timeout
-    uint8_t success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100);
-    
-    if (success) {
-      Serial.println("✓ Tag detected! Writing data...");
-      
-      // Write to NDEF block (block 4 for MIFARE Classic)
-      // For NTAG cards, typically page 4+
-      
-      uint8_t blockNumber = 4; // Start block
-      uint8_t dataBuffer[16];
-      
-      // Prepare data (max 16 bytes per block)
-      memset(dataBuffer, 0, 16);
-      int dataLen = (data.length() < 16) ? data.length() : 16;
-      data.getBytes(dataBuffer, dataLen + 1);
-      
-      // Try to authenticate (for MIFARE Classic)
-      uint8_t keyA[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-      success = nfc.mifareclassic_AuthenticateBlock(uid, uidLength, blockNumber, 0, keyA);
-      
-      if (success) {
-        // Write data
-        success = nfc.mifareclassic_WriteDataBlock(blockNumber, dataBuffer);
-        
-        if (success) {
-          Serial.println("✅ Write successful!");
-          Serial.print("Written: ");
-          Serial.println(data);
-          successfulWrites++;
-        } else {
-          Serial.println("❌ Write failed!");
-        }
-      } else {
-        // Try NTAG write (for NTAG213/215/216)
-        Serial.println("MIFARE auth failed, trying NTAG write...");
-        
-        // NTAG uses pages instead of blocks
-        // Page 4 is usually safe to write to
-        uint8_t page = 4;
-        success = nfc.ntag2xx_WritePage(page, dataBuffer);
-        
-        if (success) {
-          Serial.println("✅ NTAG Write successful!");
-          Serial.print("Written: ");
-          Serial.println(data);
-          successfulWrites++;
-        } else {
-          Serial.println("❌ NTAG Write failed!");
-        }
-      }
-      
-      return;
-    }
-    
-    delay(100);
-  }
-  
-  Serial.println("⏱️  Timeout - no tag detected");
-}
-
-void readTagData(uint8_t uid[], uint8_t uidLength) {
-  Serial.println("\n📖 Reading tag data...");
-  
-  // Try MIFARE Classic first
-  uint8_t blockNumber = 4;
-  uint8_t keyA[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-  uint8_t dataBuffer[16];
-  
-  uint8_t success = nfc.mifareclassic_AuthenticateBlock(uid, uidLength, blockNumber, 0, keyA);
-  
-  if (success) {
-    Serial.println("✓ MIFARE Classic detected");
-    success = nfc.mifareclassic_ReadDataBlock(blockNumber, dataBuffer);
-    
-    if (success) {
-      Serial.println("✓ Block 4 data:");
-      printHexData(dataBuffer, 16);
-      printAsciiData(dataBuffer, 16);
-    } else {
-      Serial.println("❌ Read failed");
-    }
-  } else {
-    // Try NTAG read
-    Serial.println("Trying NTAG read...");
-    
-    uint8_t pageBuffer[32];
-    success = nfc.ntag2xx_ReadPage(4, pageBuffer);
-    
-    if (success) {
-      Serial.println("✓ NTAG card detected");
-      Serial.println("✓ Page 4-7 data:");
-      printHexData(pageBuffer, 16); // First 4 pages
-      printAsciiData(pageBuffer, 16);
-    } else {
-      Serial.println("❌ Could not read data (card may be empty or locked)");
-    }
-  }
-}
-
-void printScanHeader() {
-  Serial.println("\n╔════════════════════════════════════════╗");
-  Serial.println("║       🎯 NFC TAG DETECTED!            ║");
-  Serial.println("╚════════════════════════════════════════╝");
-}
-
-void printScanFooter() {
-  Serial.println("╚════════════════════════════════════════╝\n");
-}
-
-void printTagInfo(uint8_t uid[], uint8_t uidLength, String nfcId) {
-  Serial.print("📌 UID Length: ");
-  Serial.print(uidLength);
-  Serial.println(" bytes");
-  
-  Serial.print("📌 UID (Hex):  ");
-  for (uint8_t i = 0; i < uidLength; i++) {
-    Serial.print("0x");
-    if (uid[i] < 0x10) Serial.print("0");
-    Serial.print(uid[i], HEX);
-    if (i < uidLength - 1) Serial.print(" ");
-  }
-  Serial.println();
-  
-  Serial.print("📌 UID (String): ");
+void handleNormalScan(uint8_t uid[], uint8_t uidLength, String nfcId) {
+  Serial.println("\n🎯 TAG_DETECTED");
+  Serial.print("NFC_SCAN:");
   Serial.println(nfcId);
   
-  // Determine card type
-  if (uidLength == 4) {
-    Serial.println("📌 Type: MIFARE Classic 1K / NTAG");
-  } else if (uidLength == 7) {
-    Serial.println("📌 Type: MIFARE Ultralight / NTAG");
-  } else {
-    Serial.println("📌 Type: Unknown");
-  }
+  successfulReads++;
 }
 
-void printHexData(uint8_t data[], int length) {
-  Serial.print("   Hex: ");
-  for (int i = 0; i < length; i++) {
-    if (data[i] < 0x10) Serial.print("0");
-    Serial.print(data[i], HEX);
-    Serial.print(" ");
-    if ((i + 1) % 8 == 0) Serial.print(" ");
-  }
-  Serial.println();
-}
-
-void printAsciiData(uint8_t data[], int length) {
-  Serial.print("   ASCII: ");
-  for (int i = 0; i < length; i++) {
+String bytesToAscii(uint8_t *data, uint8_t length) {
+  String result = "";
+  for (uint8_t i = 0; i < length; i++) {
+    // Only add printable characters (Space through ~)
     if (data[i] >= 32 && data[i] <= 126) {
-      Serial.print((char)data[i]);
-    } else {
-      Serial.print(".");
+      result += (char)data[i];
     }
   }
-  Serial.println();
+  return result;
 }
 
-void printCommands() {
-  Serial.println("\n╔════════════════════════════════════════╗");
-  Serial.println("║          AVAILABLE COMMANDS            ║");
-  Serial.println("╠════════════════════════════════════════╣");
-  Serial.println("║ HELP         - Show this help          ║");
-  Serial.println("║ STATS        - Show statistics         ║");
-  Serial.println("║ SCAN         - Manual scan trigger     ║");
-  Serial.println("║ WRITE:text   - Write text to next tag ║");
-  Serial.println("║ RESET        - Reset statistics        ║");
-  Serial.println("╚════════════════════════════════════════╝");
-  Serial.println("\nExample: WRITE:USER123");
-  Serial.println("         WRITE:Hello World\n");
+void handleRead(uint8_t *uid, uint8_t uidLength, String nfcId) {
+  uint8_t data[16]; // Buffer to hold 16 bytes of data
+  
+  // Try to read Block 4 (Standard for MIFARE Classic)
+  // Note: Authenticate first if using MIFARE Classic!
+  uint8_t success = nfc.mifareclassic_ReadDataBlock(4, data);
+
+  if (success) {
+    String asciiName = bytesToAscii(data, 16);
+    Serial.print("USER_NAME:");
+    Serial.println(asciiName);
+    
+    // If you want a numeric version of that string:
+    // long userNum = asciiName.toInt(); 
+  } else {
+    // If Classic fails, try NTAG2xx (common for stickers/round tags)
+    success = nfc.ntag2xx_ReadPage(4, data);
+    if (success) {
+      String asciiName = bytesToAscii(data, 16);
+      Serial.print("USER_NAME:");
+      Serial.println(asciiName);
+    }
+  }
+}
+
+void handleWrite(uint8_t uid[], uint8_t uidLength, String nfcId) {
+  Serial.println("\n✍️  WRITE_OPERATION");
+  Serial.print("NFC_ID:");
+  Serial.println(nfcId);
+  Serial.print("WRITING:");
+  Serial.println(pendingWriteData);
+  
+  // Prepare data buffer
+  uint8_t data[16];
+  memset(data, 0, 16);
+  
+  int len = min((unsigned int)pendingWriteData.length(), 16U);
+  for (int i = 0; i < len; i++) {
+    data[i] = pendingWriteData[i];
+  }
+  
+  bool writeSuccess = false;
+  
+  // Try MIFARE Classic first
+  uint8_t keyA[6] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+  uint8_t block = 4;
+  
+  if (nfc.mifareclassic_AuthenticateBlock(uid, uidLength, block, 0, keyA)) {
+    if (nfc.mifareclassic_WriteDataBlock(block, data)) {
+      writeSuccess = true;
+      Serial.println("WRITE_SUCCESS:MIFARE");
+    }
+  } else {
+    // Try NTAG
+    if (nfc.ntag2xx_WritePage(4, data)) {
+      writeSuccess = true;
+      Serial.println("WRITE_SUCCESS:NTAG");
+    }
+  }
+  
+  if (writeSuccess) {
+    successfulWrites++;
+  } else {
+    Serial.println("WRITE_FAILED");
+  }
+  
+  // Exit write mode
+  writeMode = false;
+  pendingWriteData = "";
+  Serial.println("NORMAL_MODE_ACTIVE");
 }
 
 void printStats() {
   Serial.println("\n╔════════════════════════════════════════╗");
   Serial.println("║            STATISTICS                  ║");
   Serial.println("╠════════════════════════════════════════╣");
-  Serial.print("║ Total Scans:      ");
-  Serial.println(totalScans);
-  Serial.print("║ Successful Reads: ");
-  Serial.println(successfulReads);
-  Serial.print("║ Successful Writes: ");
-  Serial.println(successfulWrites);
-  Serial.print("║ Uptime:           ");
+  Serial.print("║ Uptime: ");
   Serial.print(millis() / 1000);
-  Serial.println(" seconds");
-  Serial.println("╚════════════════════════════════════════╝\n");
+  Serial.println(" sec");
+  Serial.print("║ Total Scans: ");
+  Serial.println(totalScans);
+  Serial.print("║ Reads: ");
+  Serial.println(successfulReads);
+  Serial.print("║ Writes: ");
+  Serial.println(successfulWrites);
+  Serial.println("╚════════════════════════════════════════╝");
 }
