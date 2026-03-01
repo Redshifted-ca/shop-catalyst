@@ -2,6 +2,8 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+const SESSION_DURATION = 60 * 60 * 24 // 24 hours in seconds
+
 export async function middleware(req: NextRequest) {
   let res = NextResponse.next({
     request: {
@@ -18,10 +20,18 @@ export async function middleware(req: NextRequest) {
           return req.cookies.get(name)?.value
         },
         set(name: string, value: string, options: CookieOptions) {
+          const cookieOptions = {
+            ...options,
+            maxAge: SESSION_DURATION, // 24 hours
+            sameSite: 'lax' as const,
+            secure: process.env.NODE_ENV === 'production',
+            path: '/',
+          }
+
           req.cookies.set({
             name,
             value,
-            ...options,
+            ...cookieOptions,
           })
           res = NextResponse.next({
             request: {
@@ -31,14 +41,20 @@ export async function middleware(req: NextRequest) {
           res.cookies.set({
             name,
             value,
-            ...options,
+            ...cookieOptions,
           })
         },
         remove(name: string, options: CookieOptions) {
+          const cookieOptions = {
+            ...options,
+            maxAge: 0,
+            path: '/',
+          }
+
           req.cookies.set({
             name,
             value: '',
-            ...options,
+            ...cookieOptions,
           })
           res = NextResponse.next({
             request: {
@@ -48,33 +64,29 @@ export async function middleware(req: NextRequest) {
           res.cookies.set({
             name,
             value: '',
-            ...options,
+            ...cookieOptions,
           })
         },
       },
     }
   )
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  const { data: { user }, error } = await supabase.auth.getUser()
 
-  // Protect routes
-  const protectedPaths = ['/shop', '/cart', '/submit', '/admin', '/cashier']
+  const protectedPaths = ['/shop', '/cart', '/submit', '/admin', '/cashier', '/gallery']
   const isProtectedPath = protectedPaths.some(path => 
     req.nextUrl.pathname.startsWith(path)
   )
 
-  if (isProtectedPath && !session) {
+  if (isProtectedPath && !user) {
     return NextResponse.redirect(new URL('/', req.url))
   }
 
-  // Role-based access
-  if (session) {
+  if (user) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single()
 
     if (req.nextUrl.pathname.startsWith('/admin') && profile?.role !== 'admin') {

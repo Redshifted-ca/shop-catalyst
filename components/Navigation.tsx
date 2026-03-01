@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { User } from '@supabase/supabase-js'
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 import { ShoppingCart, Package, Upload, Settings, LogOut, Coins, Sparkles } from 'lucide-react'
 
 interface Profile {
@@ -23,43 +22,63 @@ interface Profile {
 export default function Navigation() {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [loading, setLoading] = useState(true)
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
 
   useEffect(() => {
-    // FIXED: Use getUser() on mount
-    const getInitialUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+    const initAuth = async () => {
+      try {
+        // Get initial user
+        const { data: { user }, error } = await supabase.auth.getUser()
+        
+        if (error) {
+          console.error('Auth error:', error)
+          setLoading(false)
+          return
+        }
 
-      if (user) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        setProfile(data)
+        setUser(user)
+
+        if (user) {
+          // Get profile
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single()
+
+          if (profileError) {
+            console.error('Profile error:', profileError)
+          } else {
+            setProfile(profileData)
+          }
+        }
+      } catch (err) {
+        console.error('Init error:', err)
+      } finally {
+        setLoading(false)
       }
     }
 
-    getInitialUser()
+    initAuth()
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event: AuthChangeEvent, session: Session | null) => {
-        if (session?.user) {
-          // FIXED: Verify user authenticity after state change
+      async (_event, session) => {
+        if (session) {
+          // Verify user after state change
           const { data: { user } } = await supabase.auth.getUser()
           setUser(user)
           
           if (user) {
-            const { data } = await supabase
+            const { data: profileData } = await supabase
               .from('profiles')
               .select('*')
               .eq('id', user.id)
               .single()
-            setProfile(data)
+            setProfile(profileData)
           }
         } else {
           setUser(null)
@@ -73,10 +92,20 @@ export default function Navigation() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
-    router.push('/')
+    setUser(null)
+    setProfile(null)
+    window.location.href = '/' // Changed from router.push('/')
   }
 
-  if (!user) return null
+  // Don't render anything while loading
+  if (loading) {
+    return null
+  }
+
+  // Don't render if no user
+  if (!user) {
+    return null
+  }
 
   const navItems = [
     { href: '/shop', label: 'Shop', icon: Package },

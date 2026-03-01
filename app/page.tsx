@@ -14,8 +14,8 @@ export default function Home() {
   const router = useRouter()
   const supabase = createClient()
 
-  // Countdown to hackathon end - CHANGE THIS DATE/TIME
-  const targetDate = new Date('2026-03-07T08:00:00').getTime()
+  // Countdown configuration
+  const targetDate = new Date('2026-02-15T18:00:00').getTime()
 
   const [timeLeft, setTimeLeft] = useState({
     days: 0,
@@ -25,10 +25,11 @@ export default function Home() {
   })
 
   useEffect(() => {
+    // FIXED: Use getUser() instead of getSession()
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        router.push('/shop')
+        window.location.href = '/shop'
       }
     }
     checkUser()
@@ -54,36 +55,41 @@ export default function Home() {
     return () => clearInterval(timer)
   }, [targetDate])
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+    const handleAuth = async (e: React.FormEvent) => {
+      e.preventDefault()
+      setLoading(true)
+      setError('')
 
-    try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name: fullName }
-          }
-        })
-        if (error) throw error
-        router.push('/shop')
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
-        if (error) throw error
-        router.push('/shop')
+      try {
+        if (isSignUp) {
+          const { error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: { full_name: fullName }
+            }
+          })
+          if (error) throw error
+          
+          // Use window.location for hard navigation (ensures cookies are set)
+          window.location.href = '/shop'
+        } else {
+          const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          })
+          if (error) throw error
+
+          // Force full page reload (ensures cookies are fresh)
+          window.location.href = '/shop'
+        }
+      } catch (err: any) {
+        setError(err.message)
+        setLoading(false) // Only reset loading on error
       }
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
+      // Don't set loading to false on success - page will navigate away
     }
-  }
+
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-b from-black via-blue-950 to-cyan-950">
