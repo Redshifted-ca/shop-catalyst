@@ -48,7 +48,7 @@ bool waitingForTag = false;
 // ========================================
 void setup() {
   // Initialize Serial
-  Serial.begin(9600);
+  Serial.begin(115200);
   delay(1000);
   
   // Print startup banner

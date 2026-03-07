@@ -154,6 +154,7 @@ export default function Navigation() {
                 {profile?.virtual_currency || 0} coins
               </span>
             </div>
+            <a href="/">
             <button
               onClick={handleSignOut}
               className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700"
@@ -161,6 +162,7 @@ export default function Navigation() {
               <LogOut className="w-4 h-4 mr-1" />
               Sign out
             </button>
+            </a>
           </div>
         </div>
       </div>

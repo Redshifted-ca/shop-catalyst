@@ -527,60 +527,60 @@ export default function CashierPage() {
     }
   }
 
-  const handleWriteToTag = async () => {
-    if (!writeData.trim()) {
-      setError('Enter data to write')
-      return
-    }
-
-    if (writeData.length > 16) {
-      setError('Max 16 characters')
-      return
-    }
-
-    setIsWriting(true)
-    setError('')
-    setSuccess('')
-    addDebugLog(`📤 Write: ${writeData}`)
-
-    try {
-      await sendSerialCommand(`WRITE:${writeData}`)
-      setNfcMode('write')
-      setSerialState(prev => ({ ...prev, status: 'Tap tag to write...' }))
-    } catch (err: any) {
-      setError('Write command failed: ' + err.message)
-      setIsWriting(false)
-    }
+const handleWriteToTag = async () => {
+  if (!writeData.trim()) {
+    setError('Please enter data to write')
+    return
   }
 
-  const handleReadFromTag = async () => {
-    setIsReading(true)
-    setError('')
-    setSuccess('')
+  if (writeData.length > 16) {
+    setError('Data too long! Maximum 16 characters.')
+    return
+  }
+
+  setIsWriting(true)
+  setError('')
+  setSuccess('')
+  addDebugLog(`📤 Sending write command: ${writeData}`)
+
+  try {
+    await sendSerialCommand(`WRITE:${writeData}`)
+    addDebugLog('✓ Write command sent, waiting for tag...')
+  } catch (err: any) {
+    setError('Failed to send write command: ' + err.message)
+    setIsWriting(false)
+  }
+}
+
+const handleReadFromTag = async () => {
+  setIsReading(true)
+  setError('')
+  setSuccess('')
+  setReadData(null)
+  addDebugLog('📤 Sending read command')
+
+  try {
+    await sendSerialCommand('READ')
+    addDebugLog('✓ Read command sent, waiting for tag...')
+  } catch (err: any) {
+    setError('Failed to send read command: ' + err.message)
+    setIsReading(false)
+  }
+}
+
+const handleNormalMode = async () => {
+  try {
+    await sendSerialCommand('NORMAL')
+    setNfcMode('scan')
+    setIsWriting(false)
+    setIsReading(false)
     setReadData(null)
-    addDebugLog('📤 Read command')
-
-    try {
-      await sendSerialCommand('READ')
-      setNfcMode('read')
-      setSerialState(prev => ({ ...prev, status: 'Tap tag to read...' }))
-    } catch (err: any) {
-      setError('Read command failed: ' + err.message)
-      setIsReading(false)
-    }
+    setSerialState(prev => ({ ...prev, status: 'Ready - Scan mode' }))
+    addDebugLog('🔄 Switched to normal scan mode')
+  } catch (err: any) {
+    setError('Mode switch failed: ' + err.message)
   }
-
-  const handleNormalMode = async () => {
-    try {
-      await sendSerialCommand('NORMAL')
-      setNfcMode('scan')
-      setIsWriting(false)
-      setIsReading(false)
-      setSerialState(prev => ({ ...prev, status: 'Ready - Scan mode' }))
-    } catch (err: any) {
-      setError('Mode switch failed: ' + err.message)
-    }
-  }
+}
 
   // Audio feedback
   const playSuccessSound = () => {
@@ -650,6 +650,155 @@ export default function CashierPage() {
                   <div key={i}>{log}</div>
                 ))
               )}
+              {/* Mode Selection & Read/Write Interface */}
+{serialState.isConnected && (
+  <div className="bg-gray-900/60 backdrop-blur-sm border border-cyan-500/30 rounded-xl p-6 mb-8">
+    <h3 className="text-lg font-semibold text-cyan-300 mb-4">NFC Operations</h3>
+    
+    {/* Mode Tabs */}
+    <div className="flex space-x-2 mb-6">
+      <button
+        onClick={handleNormalMode}
+        className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${
+          nfcMode === 'scan'
+            ? 'bg-cyan-600 text-white'
+            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+        }`}
+      >
+        <Scan className="w-4 h-4 inline mr-2" />
+        Scan (Lookup)
+      </button>
+      <button
+        onClick={handleReadFromTag}
+        disabled={isReading}
+        className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${
+          nfcMode === 'read'
+            ? 'bg-blue-600 text-white'
+            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+        } disabled:opacity-50 disabled:cursor-not-allowed`}
+      >
+        <BookOpen className="w-4 h-4 inline mr-2" />
+        {isReading ? 'Waiting...' : 'Read'}
+      </button>
+      <button
+        onClick={() => {
+          setNfcMode('write')
+          setIsWriting(false)
+        }}
+        className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${
+          nfcMode === 'write'
+            ? 'bg-purple-600 text-white'
+            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+        }`}
+      >
+        <Edit className="w-4 h-4 inline mr-2" />
+        Write
+      </button>
+    </div>
+
+    {/* Write Interface */}
+    {nfcMode === 'write' && (
+      <div className="space-y-4 p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+        <div>
+          <label className="block text-purple-300 text-sm font-medium mb-2">
+            Data to Write (Max 16 characters)
+          </label>
+          <input
+            type="text"
+            value={writeData}
+            onChange={(e) => setWriteData(e.target.value.slice(0, 16))}
+            placeholder="Enter text..."
+            maxLength={16}
+            disabled={isWriting}
+            className="w-full px-4 py-2 bg-gray-800 border border-purple-500/30 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            {writeData.length}/16 characters
+          </p>
+        </div>
+        
+        {isWriting && (
+          <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+            <p className="text-yellow-300 text-sm flex items-center">
+              <Zap className="w-4 h-4 mr-2 animate-pulse" />
+              Waiting for NFC tag... Tap now!
+            </p>
+          </div>
+        )}
+        
+        <button
+          onClick={handleWriteToTag}
+          disabled={isWriting || !writeData.trim()}
+          className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-all flex items-center justify-center"
+        >
+          {isWriting ? (
+            <>
+              <Zap className="w-5 h-5 mr-2 animate-pulse" />
+              Tap NFC Tag Now...
+            </>
+          ) : (
+            <>
+              <Edit className="w-5 h-5 mr-2" />
+              Write to NFC Tag
+            </>
+          )}
+        </button>
+        
+        <div className="text-xs text-gray-400 space-y-1">
+          <p>💡 Examples:</p>
+          <p>• participant1@example.com</p>
+          <p>• USER001</p>
+          <p>• ADMIN</p>
+        </div>
+      </div>
+    )}
+
+    {/* Read Interface */}
+    {nfcMode === 'read' && (
+      <div className="space-y-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+        {isReading ? (
+          <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+            <p className="text-yellow-300 text-sm flex items-center">
+              <BookOpen className="w-4 h-4 mr-2 animate-pulse" />
+              Waiting for NFC tag... Tap now!
+            </p>
+          </div>
+        ) : (
+          <p className="text-blue-300 text-sm">
+            Click the "Read" button above and tap an NFC tag to read its data.
+          </p>
+        )}
+      </div>
+    )}
+
+        {/* Read Data Display */}
+        {readData && (
+          <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg space-y-3">
+            <h4 className="text-blue-300 font-semibold flex items-center">
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Data Read from Tag
+            </h4>
+            <div>
+              <p className="text-xs text-gray-400">ASCII:</p>
+              <p className="font-mono text-blue-200 text-lg">{readData.ascii}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Hex:</p>
+              <p className="font-mono text-xs text-blue-200 break-all">{readData.hex}</p>
+            </div>
+            <p className="text-xs text-gray-500">
+              Read at: {readData.timestamp.toLocaleTimeString()}
+            </p>
+            <button
+              onClick={() => setReadData(null)}
+              className="text-sm text-blue-400 hover:text-blue-300"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
+    )}
             </div>
           </div>
         )}
